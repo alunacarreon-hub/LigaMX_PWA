@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>TRYON AR</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { background:#0a0a0a; color:#f0f0f0; font-family:'DM Sans',sans-serif; height:100%; overflow:hidden; }
+.app { display:flex; flex-direction:column; height:100dvh; }
+.header { padding:14px 20px 6px; display:flex; align-items:baseline; gap:10px; flex-shrink:0; }
+.header h1 { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:2px; color:#fff; }
+.header span { font-size:11px; color:#555; letter-spacing:1px; text-transform:uppercase; }
+.shoe-selector { display:flex; gap:8px; padding:0 16px 10px; overflow-x:auto; scrollbar-width:none; flex-shrink:0; }
+.shoe-selector::-webkit-scrollbar { display:none; }
+.shoe-thumb { flex-shrink:0; width:64px; height:64px; border-radius:12px; background:#1a1a1a; border:2px solid transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:6px; transition:border-color 0.2s; }
+.shoe-thumb.active { border-color:#e0ff00; }
+.shoe-thumb canvas { width:44px; height:28px; }
+.shoe-thumb .lbl { font-size:8px; color:#555; text-align:center; letter-spacing:0.5px; text-transform:uppercase; }
+.shoe-thumb.active .lbl { color:#e0ff00; }
+.ar-container { position:relative; flex:1; overflow:hidden; background:#111; }
+#video { width:100%; height:100%; object-fit:cover; display:block; }
+#overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.ar-badge { position:absolute; top:12px; left:12px; background:rgba(224,255,0,0.12); border:1px solid #e0ff00; color:#e0ff00; font-size:10px; letter-spacing:2px; padding:4px 10px; border-radius:20px; text-transform:uppercase; display:none; }
+.hint-box { position:absolute; bottom:14px; left:14px; right:14px; background:rgba(0,0,0,0.65); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-radius:14px; padding:12px 16px; font-size:13px; color:#aaa; text-align:center; transition:opacity 0.4s; }
+.start-overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.75); gap:16px; transition:opacity 0.3s; }
+.start-overlay.hidden { opacity:0; pointer-events:none; }
+.cam-btn { width:72px; height:72px; border-radius:50%; background:#e0ff00; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.cam-btn svg { width:34px; height:34px; stroke:#0a0a0a; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.start-overlay p { font-size:15px; color:#ccc; font-weight:300; }
+.bottom-bar { padding:10px 20px 16px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; background:#0a0a0a; }
+.shoe-name { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:1px; }
+.shoe-price { font-size:18px; font-weight:500; color:#e0ff00; }
+#status-msg { text-align:center; font-size:11px; color:#444; padding:0 20px 4px; flex-shrink:0; min-height:18px; }
+.progress { position:absolute; bottom:0; left:0; height:2px; background:#e0ff00; width:0%; transition:width 0.4s; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header"><h1>TRYON AR</h1><span>Pruébatelos</span></div>
+  <div class="shoe-selector" id="sel"></div>
+  <div class="ar-container">
+    <video id="video" autoplay muted playsinline webkit-playsinline></video>
+    <canvas id="overlay"></canvas>
+    <div class="ar-badge" id="badge">● LIVE AR</div>
+    <div class="hint-box" id="hint">Siéntate y apunta la cámara hacia tus pies</div>
+    <div class="progress" id="prog"></div>
+    <div class="start-overlay" id="startOv">
+      <button class="cam-btn" id="startBtn">
+        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </button>
+      <p>Toca para activar la cámara</p>
+    </div>
+  </div>
+  <div id="status-msg"></div>
+  <div class="bottom-bar">
+    <div class="shoe-name" id="shoeName">JORDAN 1 RETRO</div>
+    <div class="shoe-price" id="shoePrice">$2,499</div>
+  </div>
+</div>
+
+<script>
+const shoes = [
+  { name:'JORDAN 1 RETRO',  price:'$2,499', color:'#e63946', accent:'#ffffff', toe:'#c1121f', sole:'#f1faee' },
+  { name:'AIR MAX 90',      price:'$1,899', color:'#2d6a4f', accent:'#b7e4c7', toe:'#1b4332', sole:'#ffffff' },
+  { name:'YEEZY 350',       price:'$3,200', color:'#7b6d8d', accent:'#e2d9f3', toe:'#4a4558', sole:'#e2d9f3' },
+  { name:'CHUCK TAYLOR',    price:'$999',   color:'#e9c46a', accent:'#264653', toe:'#f4a261', sole:'#ffffff' },
+  { name:'NEW BALANCE 550', price:'$1,699', color:'#023e8a', accent:'#90e0ef', toe:'#0077b6', sole:'#caf0f8' },
+];
+let sel = 0, camActive = false;
+let smoothL = null, smoothR = null;
+
+const video   = document.getElementById('video');
+const ov      = document.getElementById('overlay');
+const ctx     = ov.getContext('2d');
+const hint    = document.getElementById('hint');
+const badge   = document.getElementById('badge');
+const prog    = document.getElementById('prog');
+const status  = document.getElementById('status-msg');
+const startOv = document.getElementById('startOv');
+
+const offCv  = document.createElement('canvas');
+const offCtx = offCv.getContext('2d', { willReadFrequently: true });
+
+// ── Thumb icons ──
+function drawThumb(c, s) {
+  const cx = c.getContext('2d');
+  cx.clearRect(0,0,44,28);
+  cx.beginPath(); cx.moveTo(2,22); cx.bezierCurveTo(2,17,6,13,14,12); cx.bezierCurveTo(20,11,28,10,36,12); cx.bezierCurveTo(41,13,44,16,44,19); cx.lineTo(44,23); cx.lineTo(2,23); cx.closePath(); cx.fillStyle=s.sole; cx.fill();
+  cx.beginPath(); cx.moveTo(4,21); cx.bezierCurveTo(4,14,9,8,17,7); cx.bezierCurveTo(23,6,30,7,37,11); cx.bezierCurveTo(42,13,44,17,44,20); cx.lineTo(4,21); cx.closePath(); cx.fillStyle=s.color; cx.fill();
+  cx.beginPath(); cx.moveTo(4,21); cx.bezierCurveTo(4,12,10,6,20,5); cx.bezierCurveTo(26,4,30,7,32,10); cx.lineTo(17,7); cx.bezierCurveTo(9,8,4,14,4,21); cx.closePath(); cx.fillStyle=s.toe; cx.fill();
+}
+
+function buildSel() {
+  const el = document.getElementById('sel');
+  shoes.forEach((sh,i) => {
+    const d = document.createElement('div'); d.className='shoe-thumb'+(i===0?' active':'');
+    const c = document.createElement('canvas'); c.width=44; c.height=28; drawThumb(c,sh);
+    const l = document.createElement('div'); l.className='lbl'; l.textContent=sh.name.split(' ').slice(0,2).join(' ');
+    d.appendChild(c); d.appendChild(l);
+    d.addEventListener('click',()=>{
+      document.querySelectorAll('.shoe-thumb').forEach(x=>x.classList.remove('active'));
+      d.classList.add('active'); sel=i;
+      document.getElementById('shoeName').textContent=sh.name;
+      document.getElementById('shoePrice').textContent=sh.price;
+    });
+    el.appendChild(d);
+  });
+}
+
+// ── Skin detection (HSV) ──
+function isSkin(r,g,b) {
+  const rf=r/255, gf=g/255, bf=b/255;
+  const max=Math.max(rf,gf,bf), min=Math.min(rf,gf,bf), delta=max-min;
+  let h=0, s=0, v=max;
+  if (delta>0) {
+    s=delta/max;
+    if (max===rf) h=((gf-bf)/delta)%6;
+    else if (max===gf) h=(bf-rf)/delta+2;
+    else h=(rf-gf)/delta+4;
+    h=h*60; if(h<0)h+=360;
+  }
+  // Broad skin range covering light to darker tones
+  return (h>=0&&h<=45) && (s>=0.12&&s<=0.88) && (v>=0.22);
+}
+
+// ── Find two foot blobs from pixel data ──
+function findFeet(W, H) {
+  const scale = 0.12;
+  const sw = Math.floor(W*scale), sh = Math.floor(H*scale);
+  offCv.width=sw; offCv.height=sh;
+  offCtx.drawImage(video, 0, 0, sw, sh);
+  const data = offCtx.getImageData(0,0,sw,sh).data;
+
+  // skin mask
+  const mask = new Uint8Array(sw*sh);
+  for (let i=0;i<sw*sh;i++) {
+    mask[i] = isSkin(data[i*4], data[i*4+1], data[i*4+2]) ? 1 : 0;
+  }
+
+  // scan rows in bottom 70% for horizontal skin runs
+  const startRow = Math.floor(sh*0.15);
+  const runs = [];
+  for (let y=startRow; y<sh; y++) {
+    let rs=-1, rl=0;
+    for (let x=0;x<sw;x++) {
+      if (mask[y*sw+x]) {
+        if(rs<0)rs=x; rl++;
+      } else {
+        if (rl > sw*0.05) runs.push({ cx:(rs+rl/2)/sw, cy:y/sh, w:rl/sw });
+        rs=-1; rl=0;
+      }
+    }
+    if (rl > sw*0.05) runs.push({ cx:(rs+rl/2)/sw, cy:sh/sh, w:rl/sw });
+  }
+
+  if (runs.length < 4) return null;
+
+  // cluster runs by X
+  const groups = [];
+  for (const pt of runs) {
+    let placed=false;
+    for (const g of groups) {
+      if (Math.abs(g.cx-pt.cx) < 0.25) {
+        g.pts.push(pt);
+        g.cx=g.pts.reduce((a,p)=>a+p.cx,0)/g.pts.length;
+        g.cy=g.pts.reduce((a,p)=>a+p.cy,0)/g.pts.length;
+        g.w=Math.max(...g.pts.map(p=>p.w));
+        placed=true; break;
+      }
+    }
+    if (!placed) groups.push({cx:pt.cx,cy:pt.cy,w:pt.w,pts:[pt]});
+  }
+
+  const valid = groups.filter(g=>g.pts.length>=4).sort((a,b)=>a.cx-b.cx);
+  if (valid.length < 2) return null;
+
+  return { L: valid[0], R: valid[valid.length-1] };
+}
+
+// ── Draw shoe ──
+function drawShoe(cx, x, y, w, angle, shoe, flip) {
+  cx.save();
+  cx.translate(x,y);
+  if(flip)cx.scale(-1,1);
+  cx.rotate(angle);
+  const h=w*0.44;
+
+  cx.shadowColor='rgba(0,0,0,0.4)'; cx.shadowBlur=12; cx.shadowOffsetY=5;
+  cx.beginPath(); cx.moveTo(-w*.5,h*.2); cx.bezierCurveTo(-w*.5,h*.6,-w*.3,h*.7,0,h*.7); cx.bezierCurveTo(w*.3,h*.7,w*.5,h*.6,w*.5,h*.2); cx.lineTo(w*.5,h*.35); cx.bezierCurveTo(w*.5,h*.8,w*.3,h*.9,0,h*.9); cx.bezierCurveTo(-w*.3,h*.9,-w*.5,h*.8,-w*.5,h*.35); cx.closePath(); cx.fillStyle=shoe.sole; cx.fill();
+  cx.shadowBlur=0; cx.shadowOffsetY=0;
+
+  cx.beginPath(); cx.moveTo(-w*.48,h*.18); cx.bezierCurveTo(-w*.44,-h*.4,-w*.2,-h*.7,0,-h*.76); cx.bezierCurveTo(w*.25,-h*.7,w*.44,-h*.28,w*.48,h*.12); cx.bezierCurveTo(w*.48,h*.52,w*.3,h*.62,0,h*.62); cx.bezierCurveTo(-w*.3,h*.62,-w*.48,h*.52,-w*.48,h*.18); cx.closePath(); cx.fillStyle=shoe.color; cx.globalAlpha=0.93; cx.fill(); cx.globalAlpha=1;
+
+  cx.beginPath(); cx.moveTo(-w*.48,h*.14); cx.bezierCurveTo(-w*.44,-h*.4,-w*.08,-h*.72,w*.04,-h*.74); cx.bezierCurveTo(-w*.08,-h*.6,-w*.34,-h*.2,-w*.38,h*.1); cx.closePath(); cx.fillStyle=shoe.toe; cx.globalAlpha=0.88; cx.fill(); cx.globalAlpha=1;
+
+  for(let l=0;l<4;l++){const ly=-h*.36+l*h*.19,lw=w*.24-l*w*.02; cx.beginPath();cx.moveTo(-lw*.5,ly);cx.lineTo(lw*.5,ly);cx.strokeStyle=shoe.accent;cx.lineWidth=h*.06;cx.lineCap='round';cx.globalAlpha=0.72;cx.stroke();cx.globalAlpha=1;}
+
+  cx.beginPath(); cx.moveTo(-w*.48,h*.18); cx.bezierCurveTo(-w*.44,-h*.4,-w*.2,-h*.7,0,-h*.76); cx.bezierCurveTo(w*.25,-h*.7,w*.44,-h*.28,w*.48,h*.12); cx.bezierCurveTo(w*.48,h*.52,w*.3,h*.62,0,h*.62); cx.bezierCurveTo(-w*.3,h*.62,-w*.48,h*.52,-w*.48,h*.18); cx.strokeStyle='rgba(255,255,255,0.2)'; cx.lineWidth=1.5; cx.stroke();
+
+  cx.restore();
+}
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function smooth(prev,curr,a){if(!prev)return{...curr};return{cx:lerp(prev.cx,curr.cx,a),cy:lerp(prev.cy,curr.cy,a),w:lerp(prev.w,curr.w,a)};}
+
+// ── Render loop ──
+function renderLoop() {
+  const W=ov.width=ov.offsetWidth, H=ov.height=ov.offsetHeight;
+  ctx.clearRect(0,0,W,H);
+
+  if (camActive && video.readyState>=2) {
+    const feet = findFeet(W,H);
+    if (feet) {
+      smoothL = smooth(smoothL, feet.L, 0.28);
+      smoothR = smooth(smoothR, feet.R, 0.28);
+
+      const lx=smoothL.cx*W, ly=smoothL.cy*H;
+      const rx=smoothR.cx*W, ry=smoothR.cy*H;
+      const dist=Math.hypot(rx-lx,ry-ly);
+      const shoeW=Math.max(dist*0.9, 55);
+      const angle=Math.atan2(ry-ly,rx-lx)*0.06;
+      const shoe=shoes[sel];
+
+      drawShoe(ctx, lx, ly-shoeW*0.08, shoeW, angle, shoe, false);
+      drawShoe(ctx, rx, ry-shoeW*0.08, shoeW, angle, shoe, true);
+
+      hint.style.opacity='0';
+      status.textContent='✓ Pies detectados';
+    } else {
+      smoothL=null; smoothR=null;
+      hint.style.opacity='1';
+      status.textContent='Acerca más — que los pies llenen el encuadre';
+    }
+  }
+  requestAnimationFrame(renderLoop);
+}
+
+// ── Start camera ──
+async function startCamera() {
+  try {
+    status.textContent='Solicitando cámara...';
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} },
+      audio:false
+    });
+    video.srcObject=stream;
+    await video.play();
+    startOv.classList.add('hidden');
+    badge.style.display='block';
+    camActive=true;
+    prog.style.width='100%';
+    setTimeout(()=>{prog.style.opacity='0';},800);
+    status.textContent='Apunta hacia tus pies — que llenen la pantalla';
+    renderLoop();
+  } catch(e) {
+    status.textContent = e.name==='NotAllowedError'
+      ? '⚠ Permiso denegado — actívalo en Ajustes del browser'
+      : '⚠ '+e.message;
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', startCamera);
+buildSel();
+</script>
+</body>
+</html>
